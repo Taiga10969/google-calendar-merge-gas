@@ -1,113 +1,106 @@
-# Google Calendar Merge (GAS)
+# Google Calendar Merger (Apps Script)
 
-Google Apps Script (GAS) を使って、複数の Google カレンダーを 1 つの「共有用カレンダー」に自動統合するスクリプトです。  
-ソースごとにコピーの度合い（モード）を指定でき、**ゲストは一切コピーされず通知メールも送られません**。  
+このプロジェクトは、複数の Google カレンダーを 1 つの統合カレンダーに自動的にコピー・統合する Google Apps Script です。
 
----
+## ✨ 主な特徴
 
-## ✨ Features
+- 複数のカレンダーを 1 つの「共有用カレンダー」に集約
+- カレンダーごとにコピー方法（ALL / TITLE_ONLY / BUSY_SECRET）を指定可能
+- BUSY_SECRET モードではタイトルを「[prefix] 予定あり」に変換し、非公開予定に設定
+- ゲスト情報はコピーせず、安全のため作成後に削除
+- 色ポリシーを選択可能（COPY / NONE / OVERRIDE）
+- 専用カレンダー運用（DEDICATED_TARGET=true）ならタグ不要でクリーンに同期
+- ソース予定に特定タグ（例: [MIRRORED_BY_GAS]）を含む場合、コピー除外可能
+- 自分の参加ステータス（INVITED / NO / MAYBE）ごとにコピー対象から除外可能
 
-- 複数カレンダーをまとめて 1 つの「統合ビュー」を作成
-- ソースごとにモードを指定可能
-  - `ALL` : タイトル・本文・場所をコピー
-  - `TITLE_ONLY` : タイトルと時間のみコピー（本文・場所は空）
-  - `BUSY_SECRET` : タイトルを `[prefix] 予定あり` に置換し、**非公開イベント**としてコピー（prefix はソースごとに設定可能）
-- **ゲストはコピーしない**（オプション指定なし、作成後も removeGuest で削除）
-- 統合先カレンダーは常にソースの「最新スナップショット」になる（削除・更新も反映）
-- 定期実行（時間トリガー）により自動同期
+## 📂 ファイル構成
 
----
+- `Code.gs` : メインの Google Apps Script。設定値を変更して利用します。
 
-## 🛠 Setup
+## ⚙️ セットアップ手順
 
-### 1. 統合先（ターゲット）カレンダーの作成
-1. Google カレンダー → 左「その他のカレンダー」→ `+` → **新しいカレンダーを作成**  
-2. 名前例：`統合ビュー（共有用）`  
-3. 設定 → **カレンダーの統合** → **カレンダー ID** をコピー  
-   - 例: `xxxxxx@group.calendar.google.com`  
-   - プライマリカレンダーの場合は自分の Gmail アドレスが ID
+1. Google ドライブで新しい **Apps Script プロジェクト**を作成します。
+2. `Code.gs` の内容をコピーして貼り付けます。
+3. スクリプト上部の **設定値** を自分の環境に合わせて変更します。
 
-### 2. ソースカレンダー ID の取得
-同様に対象となる各カレンダーの「設定」→「カレンダーの統合」→「カレンダー ID」を控える。  
-例:
-- `source1@gmail.com`
-- `team-project@group.calendar.google.com`
-
-### 3. スクリプトの導入
-1. [Google Apps Script](https://script.google.com/) → 新しいプロジェクトを作成  
-2. `Code.gs` に [このリポジトリのコード](./Code.gs) を貼り付け  
-3. 以下を編集：
+### 必須設定
 
 ```javascript
-// 統合先
 const TARGET_CAL_ID = 'your-merged-calendar-id@group.calendar.google.com';
+```
 
-// ソース
+統合先となるカレンダーの ID を指定してください。  
+カレンダー ID は、Google カレンダーの「設定 > カレンダーの統合 > カレンダー ID」から取得できます。
+
+### ソースカレンダーの指定
+
+```javascript
 const SOURCES = [
   { id: 'source1@gmail.com', mode: 'ALL' },
-  { id: 'team-project@group.calendar.google.com', mode: 'TITLE_ONLY' },
-  { id: 'private@group.calendar.google.com', mode: 'BUSY_SECRET', prefix: 'Private' }
+  { id: 'team-project@group.calendar.google.com', mode: 'TITLE_ONLY', color: CalendarApp.EventColor.PALE_RED },
+  { id: 'private-tasks@group.calendar.google.com', mode: 'BUSY_SECRET', prefix: 'Private', color: CalendarApp.EventColor.GRAY },
 ];
-
-// 同期期間（例：過去30日〜未来180日）
-const WINDOW_PAST_DAYS = 30;
-const WINDOW_FUTURE_DAYS = 180;
-
-// 削除ポリシー
-const DEDICATED_TARGET   = true;   // true=専用カレンダーとして運用（期間内の予定を全削除して再構築）
-const ADD_MIRROR_TAG     = !DEDICATED_TARGET; // falseなら説明欄にタグを付与しない
 ```
 
-### 4. 初回実行と認可
-- `syncOnce()` を実行 → 認可ダイアログで Calendar API へのアクセスを許可
+- `id`: ソースカレンダーの ID（プライマリは Gmail アドレス、サブは `...@group.calendar.google.com`）
+- `mode`:
+  - `ALL`: タイトル・本文・場所をすべてコピー
+  - `TITLE_ONLY`: タイトルと時間のみコピー
+  - `BUSY_SECRET`: タイトルを「[prefix] 予定あり」にし、非公開予定に設定
+- `prefix`: BUSY_SECRET のときの接頭辞（例: "Private"）
+- `color`: COLOR_MODE=OVERRIDE のときに強制適用する色
 
-### 5. トリガー設定
-- スクリプトエディタ → トリガー（時計アイコン）  
-- 新規トリガー → 関数 `syncOnce` → 時間主導型 → 15〜60分ごと推奨
-
----
-
-## 📖 Modes
-
-- `ALL`  
-  ソースイベントをほぼそのままコピー。本文や場所も保持。  
-- `TITLE_ONLY`  
-  タイトルと時間のみコピー。本文や場所は落とす。  
-- `BUSY_SECRET`  
-  タイトルを `[prefix] 予定あり` に変換し、**Visibility=PRIVATE** としてコピー。  
-  - `prefix` を指定しない場合はソースカレンダー名が使われる。  
-  - 例: `{ id: 'lab@group.calendar.google.com', mode: 'BUSY_SECRET', prefix: 'Lab' }` → `[Lab] 予定あり`
-
----
-
-## 🔒 Privacy / Safety
-
-- ゲスト情報は一切コピーされません。招待メールが送られることはありません。  
-- `TITLE_ONLY` または `BUSY_SECRET` を使うことで詳細情報を隠せます。  
-- `DEDICATED_TARGET = true` にすれば統合先カレンダーには **タグやソース行を一切残さず** クリーンに同期されます。  
-
----
-
-## ⚠️ Limitations
-
-- **片方向同期のみ**（ターゲットで編集しても次回同期で上書き）  
-- 大量のイベントがある場合、GAS の実行時間上限に注意（期間を短縮 or トリガー間隔を調整）  
-- 添付ファイルなど一部属性はコピー対象外  
-
----
-
-## Example
+### 色ポリシー
 
 ```javascript
-const SOURCES = [
-  { id: 'my-primary@gmail.com', mode: 'ALL' },                    // 自分の予定は詳細コピー
-  { id: 'team@group.calendar.google.com', mode: 'TITLE_ONLY' },   // チーム予定はタイトルだけ
-  { id: 'private@group.calendar.google.com', mode: 'BUSY_SECRET', prefix: 'Private' } // 個人は予定あり
-];
+const COLOR_MODE = 'OVERRIDE'; // 'COPY' | 'NONE' | 'OVERRIDE'
 ```
 
----
+- `COPY`: ソースの色をコピー
+- `NONE`: 色を付与しない
+- `OVERRIDE`: 強制的に指定色を適用
 
-## License
+BUSY_SECRET モード専用の色を付けたい場合は `BUSY_SECRET_COLOR` を設定してください。
 
-MIT License
+### 参加ステータスによる除外
+
+```javascript
+const EXCLUDE_STATUS = {
+  INVITED: true,  // 招待のみ（未承認）はコピーしない
+  NO: false,      // 不参加を除外するなら true
+  MAYBE: false,   // 未定を除外するなら true
+};
+```
+
+自分が「招待のみ（未承認）」の予定はデフォルトでコピーされません。  
+必要に応じて `NO` や `MAYBE` も除外できます。
+
+### ソースタグによる除外
+
+```javascript
+const SOURCE_EXCLUDE_BY_TAGS = true;
+const SOURCE_EXCLUDE_TAGS = [MIRROR_TAG];
+const SOURCE_EXCLUDE_FIELDS = ['description'];
+```
+
+ソースイベントの本文・タイトル・場所に特定のタグ（例: `[MIRRORED_BY_GAS]`）が含まれている場合はコピーされません。
+
+### 削除戦略
+
+```javascript
+const DEDICATED_TARGET = true;
+```
+
+- `true`: 統合先は専用 → 期間内の予定をすべて削除して再作成（タグ不要）
+- `false`: 混在 → このスクリプトが作成したタグ付き予定のみ削除
+
+## 🚀 実行方法
+
+- `syncOnce()` を手動実行 → 予定がコピーされます。
+- 定期同期したい場合は `createTriggerEveryHour()` を実行してトリガーを作成します。
+
+## 📝 注意点
+
+- 初回実行時に認可ダイアログが表示されるので、Google カレンダー操作権限を許可してください。
+- 大量の予定を扱う場合、Google のレート制限に注意してください。必要に応じて同期範囲や実行間隔を調整してください。
+- このスクリプトは「コピー」動作のみを行い、双方向同期や更新検知は行いません。
