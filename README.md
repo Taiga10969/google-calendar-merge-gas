@@ -1,37 +1,73 @@
 # Google Calendar Merge (GAS)
 
-Google Apps Script (GAS) を使って、複数の Google カレンダーを 1 つの「共有用カレンダー」に統合コピーするツールです。  
-カレンダーごとにコピーの度合い（全て / タイトルだけ / 予定あり）を指定でき、ゲスト情報はコピーされません。
+Google Apps Script (GAS) で、複数の Google カレンダーを 1 つの「共有用カレンダー」に**片方向ミラー**するツールです。  
+各ソースカレンダーごとにコピー度合い（モード）を **英語** で指定できます：
+
+- `ALL` — タイトル・本文・場所をコピー  
+- `TITLE_ONLY` — タイトルと時間のみコピー（本文・場所は空）  
+- `BUSY_SECRET` — タイトルを **「予定あり」** に固定し、**非公開**イベントとしてコピー（本文・場所は空）
+
+> ✅ **ゲストは一切コピーしません。** 作成時に `guests` を指定せず、さらに保険として作成後にゲストが存在すれば削除します。**招待メールが送信されることはありません。**
 
 ---
 
-## ✨ 機能
+## Features
 
-- 複数のカレンダーを 1 つの共有用カレンダーに自動統合
-- カレンダーごとに「コピー度合い」を指定可能
-  - **全て**：タイトル・本文・場所をコピー
-  - **タイトルだけ**：タイトルと時間のみコピー（本文・場所は空）
-  - **予定あり**：タイトルを「予定あり」に置換し、イベントを非公開に設定
-- ゲストはコピーされず、招待メールが送られることはありません。
-- 定期的な自動実行（トリガー設定で 15〜60分ごとを推奨）
+- 複数カレンダー → 共有用カレンダーへの一元ミラー（片方向）
+- ソースごとにモードを英語で指定：`ALL` / `TITLE_ONLY` / `BUSY_SECRET`
+- タイトル先頭に `[SourceCalendarName]` を自動付与（オプション）
+- カラー（可能な場合のみ）をコピー
+- 指定期間（デフォルト：過去30日〜未来180日）だけを再構築する安全な同期方式
+- 定期トリガーで自動更新
 
 ---
 
-## 🚀 セットアップ
+## Repository Layout
+```
+.
+├─ Code.gs # メインスクリプト（GAS）
+├─ README.md # このファイル
+└─ LICENSE # MIT 推奨
+```
 
-1. **統合先カレンダー（共有用）** を Google カレンダーで新規作成し、カレンダーIDを確認する。  
-   - 設定 →「カレンダーの統合」→「カレンダーID」
+---
 
-2. **統合したいカレンダー** のIDを取得する。  
+## Setup (Step by Step)
 
-3. [Google Apps Script](https://script.google.com/) で新規プロジェクトを作成し、`Code.gs` に [このリポジトリのコード](./Code.gs) を貼り付ける。
+### 1) 共有用カレンダー（ターゲット）の作成
+1. Google カレンダーを開く  
+2. 左側「その他のカレンダー」→ `+` → **新しいカレンダーを作成**  
+3. 名前：例「統合ビュー（共有用）」→ 作成  
+4. 作成後、左側のそのカレンダー横の `︙` → **設定** → **カレンダーの統合** にある **カレンダーID** を控えます  
+   - 例：`your-merged-calendar-id@group.calendar.google.com`  
+   - ※「プライマリ（メイン）」カレンダーのIDは通常、**自分のメールアドレス** です
 
-4. `SOURCES` と `TARGET_CAL_ID` を自分の環境に合わせて編集する：
-   ```javascript
-   const TARGET_CAL_ID = 'your-merged-calendar-id@group.calendar.google.com';
+### 2) ソースカレンダー（統合したい元）の ID を控える
+- 自分の「マイカレンダー」や追加したカレンダーについて、同様に  
+  `︙` → **設定** → **カレンダーの統合** → **カレンダーID** を控えます
+- 例：
+  - `source1@gmail.com`（自分のメイン）
+  - `team-project@group.calendar.google.com`（サブカレンダー）
 
-   const SOURCES = [
-     { id: 'source1@gmail.com', mode: '全て' },
-     { id: 'your-second-calendar-id@group.calendar.google.com', mode: 'タイトルだけ' },
-     { id: 'another@group.calendar.google.com', mode: '予定あり' },
-   ];
+### 3) GAS プロジェクトを作成
+1. https://script.google.com/ → **新しいスクリプト**  
+2. `Code.gs` にこのリポジトリの中身を貼り付け  
+3. 次の設定を自分の環境に合わせて編集：
+
+```javascript
+// 共有用（ターゲット）
+const TARGET_CAL_ID = 'your-merged-calendar-id@group.calendar.google.com';
+
+// ソース（統合元）
+const SOURCES = [
+  { id: 'source1@gmail.com', mode: 'ALL' },
+  { id: 'team-project@group.calendar.google.com', mode: 'TITLE_ONLY' },
+  { id: 'personal-tasks@group.calendar.google.com', mode: 'BUSY_SECRET' },
+];
+
+// 同期ウィンドウ（必要に応じて調整可）
+const WINDOW_PAST_DAYS = 30;
+const WINDOW_FUTURE_DAYS = 180;
+
+// タイトルに [SourceCalendarName] を付けるか
+const TITLE_PREFIX_WITH_SOURCE = true;
