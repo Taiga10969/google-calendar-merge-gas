@@ -211,6 +211,7 @@ function syncOnce() {
             guests.forEach(g => created.removeGuest(g.getEmail()));
           }
         } catch (e) { /* ignore */ }
+        Utilities.sleep(1000);  // 1秒待機
       });
     }
   } finally {
